@@ -1,0 +1,73 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get code
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Prepare web files
+        run: |
+          mkdir www
+          cp index.html www/index.html
+
+      - name: Create Android project
+        run: |
+          npm init -y
+          npm install @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capacitor/local-notifications@7
+          npx cap init "Time for Homework" com.example.homework --web-dir=www
+          npx cap add android
+          npx cap sync android
+
+      - name: Draw icon
+        run: |
+          pip install pillow
+          python3 - << 'PY'
+          from PIL import Image, ImageDraw
+          import os
+          os.makedirs("assets", exist_ok=True)
+          bg = Image.new("RGBA", (1024, 1024), (14, 116, 144, 255))
+          bg.save("assets/icon-background.png")
+          fg = Image.new("RGBA", (1024, 1024), (0, 0, 0, 0))
+          d = ImageDraw.Draw(fg)
+          d.rounded_rectangle([300, 260, 724, 764], radius=40, fill=(255, 255, 255, 255))
+          d.line([(380, 520), (470, 610), (650, 420)], fill=(14, 116, 144, 255), width=60, joint="curve")
+          fg.save("assets/icon-foreground.png")
+          full = bg.copy()
+          full.alpha_composite(fg)
+          full.save("assets/icon-only.png")
+          PY
+
+      - name: Apply icon
+        run: |
+          npm install @capacitor/assets
+          npx capacitor-assets generate --android
+
+      - name: Build APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: homework-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
